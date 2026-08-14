@@ -1,8 +1,8 @@
 from google.cloud import storage
 from google.oauth2 import service_account
 
-from config import GCP_PROJECT_ID, GCP_CREDENTIALS_FILE
-
+# from config import GCP_PROJECT_ID, GCP_CREDENTIALS_FILE
+from python.src.config import GCP_PROJECT_ID, GCP_CREDENTIALS_FILE
 
 def create_gcs_client():
     credentials = service_account.Credentials.from_service_account_file(

@@ -1,6 +1,13 @@
 import mysql.connector
 
-from config import (
+# from config import (
+#     MYSQL_HOST,
+#     MYSQL_PORT,
+#     MYSQL_DATABASE,
+#     MYSQL_USER,
+#     MYSQL_PASSWORD,
+# )
+from python.src.config import (
     MYSQL_HOST,
     MYSQL_PORT,
     MYSQL_DATABASE,
