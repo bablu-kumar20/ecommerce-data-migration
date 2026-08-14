@@ -1,6 +1,6 @@
 import io
 
-from config import GCS_BUCKET_NAME
+from python.src.config import GCS_BUCKET_NAME
 
 
 def upload_dataframe_as_csv(client, dataframe, gcs_file_path):

@@ -17,13 +17,13 @@
 
 # connection.close()
 
-from database.connection import create_mysql_connection, get_tables
-from extraction.extractor import extract_table
-from gcs.client import create_gcs_client
-from gcs.uploader import upload_dataframe_as_csv
+from python.src.mysql_to_gcs_loading.database.connection import create_mysql_connection, get_tables
+from python.src.mysql_to_gcs_loading.extraction.extractor import extract_table
+from python.src.mysql_to_gcs_loading.gcs.client import create_gcs_client
+from python.src.mysql_to_gcs_loading.gcs.uploader import upload_dataframe_as_csv
 
 
-GCS_RAW_PREFIX = "raw"
+GCS_RAW_PREFIX = "babludata"
 
 
 mysql_connection = create_mysql_connection()
