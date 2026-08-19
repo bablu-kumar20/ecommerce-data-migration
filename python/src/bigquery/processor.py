@@ -56,9 +56,9 @@ def gold_transformation(
 
     query = query.replace("{PROJECT_ID}", project_id)
 
-    print(f"Creating Silver {table} table...")
+    print(f"Creating gold {table} table...")
 
     run_query(bigquery_client, query)
 
-    print(f"Silver {table} table created successfully")
+    print(f"gold {table} table created successfully")
 
