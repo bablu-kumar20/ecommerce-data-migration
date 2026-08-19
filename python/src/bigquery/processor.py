@@ -37,3 +37,28 @@ def silver_transformation(
     run_query(bigquery_client, query)
 
     print(f"Silver {table} table created successfully")
+
+
+# Function for  gold level
+
+def gold_transformation(
+    bigquery_client: bigquery.Client,
+    project_id: str,
+    table: str
+) -> None:
+    """
+    Create the gold layer using the SQL transformation.
+    """
+
+    sql_file = Path(f"sql/gold/{table}.sql")
+
+    query = sql_file.read_text(encoding="utf-8")
+
+    query = query.replace("{PROJECT_ID}", project_id)
+
+    print(f"Creating gold {table} table...")
+
+    run_query(bigquery_client, query)
+
+    print(f"gold {table} table created successfully")
+

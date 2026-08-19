@@ -6,7 +6,7 @@ from python.src.bigquery.client import create_bigquery_client
 from python.src.config import GCP_PROJECT_ID
 from python.src.bigquery.loader import load_csv_from_gcs
 
-from python.src.bigquery.processor import silver_transformation
+from python.src.bigquery.processor import silver_transformation,gold_transformation
 from python.src.bigquery.get_tables import get_bronze_tables
 
 GCS_RAW_PREFIX = "optimization_testing"
@@ -63,5 +63,28 @@ for table in tables :
     silver_transformation(  bigquery_client,  GCP_PROJECT_ID, table )  
     
 print("Silver transformation is completed.")
+
+    # Gold transformation
+    # -------------------------
+
+print("Starting Gold transformation...")
+
+gold_tables = [
+    "sales",
+    "product_performance",
+    "customer_sales",
+    "daily_sales",
+    "sales_summary"
+]
+
+for table in gold_tables:
+
+    gold_transformation(
+        bigquery_client,
+        GCP_PROJECT_ID,
+        table
+    )
+
+print("Gold transformation is completed.")
 
 mysql_connection.close()

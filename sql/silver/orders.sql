@@ -25,7 +25,9 @@ SELECT
       'SHIPPED',
       'DELIVERED',
       'COMPLETED',
-      'CANCELLED'
+      'CANCELLED',
+      'RETURNED'
+
     )
       THEN UPPER(TRIM(o.order_status))
 
@@ -47,7 +49,9 @@ SELECT
       'SHIPPED',
       'DELIVERED',
       'COMPLETED',
-      'CANCELLED'
+      'CANCELLED',
+      'RETURNED'
+
     )
       THEN TRUE
     ELSE FALSE
