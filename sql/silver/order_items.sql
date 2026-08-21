@@ -1,5 +1,5 @@
 CREATE OR REPLACE TABLE
-  `{PROJECT_ID}.ecommerce_silver.order_items`
+  `{PROJECT_ID}.{BQ_SILVER_DATASET}.order_items`
 AS
 
 SELECT
@@ -39,15 +39,15 @@ FROM (
       ORDER BY order_id, product_id
     ) AS row_num
 
-  FROM `{PROJECT_ID}.ecommerce_staging.order_items`
+  FROM `{PROJECT_ID}.{BQ_BRONZE_DATASET}.order_items`
 
   WHERE order_item_id IS NOT NULL
 ) AS oi
 
-LEFT JOIN `{PROJECT_ID}.ecommerce_silver.orders` AS o
+LEFT JOIN `{PROJECT_ID}.{BQ_SILVER_DATASET}.orders` AS o
   ON oi.order_id = o.order_id
 
-LEFT JOIN `{PROJECT_ID}.ecommerce_silver.products` AS p
+LEFT JOIN `{PROJECT_ID}.{BQ_SILVER_DATASET}.products` AS p
   ON oi.product_id = p.product_id
 
 WHERE oi.row_num = 1;

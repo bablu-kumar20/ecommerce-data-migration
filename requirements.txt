@@ -3,3 +3,5 @@ google-cloud-storage
 pandas
 python-dotenv
 pyarrow
+sqlalchemy
+pymysql

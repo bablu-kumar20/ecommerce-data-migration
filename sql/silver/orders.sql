@@ -1,5 +1,5 @@
 CREATE OR REPLACE TABLE
-  `{PROJECT_ID}.ecommerce_silver.orders`
+  `{PROJECT_ID}.{BQ_SILVER_DATASET}.orders`
 AS
 
 SELECT
@@ -71,12 +71,12 @@ FROM (
       ORDER BY order_date
     ) AS row_num
 
-  FROM `{PROJECT_ID}.ecommerce_staging.orders`
+  FROM `{PROJECT_ID}.{BQ_BRONZE_DATASET}.orders`
 
   WHERE order_id IS NOT NULL
 ) AS o
 
-LEFT JOIN `{PROJECT_ID}.ecommerce_staging.customers` AS c
+LEFT JOIN `{PROJECT_ID}.{BQ_BRONZE_DATASET}.customers` AS c
   ON o.customer_id = c.customer_id
 
 WHERE o.row_num = 1;

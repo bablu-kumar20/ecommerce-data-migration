@@ -1,5 +1,5 @@
 CREATE OR REPLACE TABLE
-  `{PROJECT_ID}.ecommerce_gold.sales_summary`
+  `{PROJECT_ID}.{BQ_GOLD_DATASET}.sales_summary`
 AS
 
 SELECT
@@ -20,4 +20,4 @@ SELECT
     2
   ) AS average_order_value
 
-FROM `{PROJECT_ID}.ecommerce_gold.sales`;
+FROM `{PROJECT_ID}.{BQ_GOLD_DATASET}.sales`;

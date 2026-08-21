@@ -1,12 +1,5 @@
-import mysql.connector
+from sqlalchemy import create_engine
 
-# from config import (
-#     MYSQL_HOST,
-#     MYSQL_PORT,
-#     MYSQL_DATABASE,
-#     MYSQL_USER,
-#     MYSQL_PASSWORD,
-# )
 from python.src.config import (
     MYSQL_HOST,
     MYSQL_PORT,
@@ -15,35 +8,23 @@ from python.src.config import (
     MYSQL_PASSWORD,
 )
 
+
 def create_mysql_connection():
-    connection = mysql.connector.connect(
-        host=MYSQL_HOST,
-        port=MYSQL_PORT,
-        database=MYSQL_DATABASE,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
+    connection_url = (
+        f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}"
+        f"@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
     )
 
-    return connection
+    engine = create_engine(connection_url)
 
-def get_tables(connection):
-    cursor = connection.cursor()
+    return engine
+# def create_mysql_connection():
+#     connection = mysql.connector.connect(
+#         host=MYSQL_HOST,
+#         port=MYSQL_PORT,
+#         database=MYSQL_DATABASE,
+#         user=MYSQL_USER,
+#         password=MYSQL_PASSWORD,
+#     )
 
-    cursor.execute("SHOW TABLES")
-
-    tables = [row[0] for row in cursor.fetchall()]
-
-    cursor.close()
-
-    return tables
-
-def get_table_row_count(connection, table_name):
-    cursor = connection.cursor()
-
-    cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`")
-
-    count = cursor.fetchone()[0]
-
-    cursor.close()
-
-    return count
+#     return connection

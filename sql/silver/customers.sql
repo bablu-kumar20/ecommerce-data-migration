@@ -1,5 +1,5 @@
 CREATE OR REPLACE TABLE
-  `{PROJECT_ID}.ecommerce_silver.customers`
+  `{PROJECT_ID}.{BQ_SILVER_DATASET}.customers`
 AS
 
 SELECT
@@ -13,7 +13,7 @@ SELECT
   CASE
     WHEN REGEXP_CONTAINS(
       LOWER(TRIM(email)),
-      r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+      r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{{2,}}$'
     )
     THEN LOWER(TRIM(email))
     ELSE NULL
@@ -35,7 +35,7 @@ SELECT
     WHEN email IS NULL THEN FALSE
     WHEN REGEXP_CONTAINS(
       LOWER(TRIM(email)),
-      r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+      r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{{2,}}$'
     )
     THEN TRUE
     ELSE FALSE
@@ -55,7 +55,7 @@ FROM (
       ORDER BY signup_data
     ) AS row_num
 
-  FROM `{PROJECT_ID}.ecommerce_staging.customers`
+  FROM `{PROJECT_ID}.{BQ_BRONZE_DATASET}.customers`
 
   WHERE customer_id IS NOT NULL
 )

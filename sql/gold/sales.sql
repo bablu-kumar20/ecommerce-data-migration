@@ -1,5 +1,5 @@
 CREATE OR REPLACE TABLE
-  `{PROJECT_ID}.ecommerce_gold.sales`
+  `{PROJECT_ID}.{BQ_GOLD_DATASET}.sales`
 AS
 
 SELECT
@@ -24,12 +24,12 @@ SELECT
     2
   ) AS line_revenue
 
-FROM `{PROJECT_ID}.ecommerce_silver.order_items` AS oi
+FROM `{PROJECT_ID}.{BQ_SILVER_DATASET}.order_items` AS oi
 
-JOIN `{PROJECT_ID}.ecommerce_silver.orders` AS o
+JOIN `{PROJECT_ID}.{BQ_SILVER_DATASET}.orders` AS o
   ON oi.order_id = o.order_id
 
-JOIN `{PROJECT_ID}.ecommerce_silver.products` AS p
+JOIN `{PROJECT_ID}.{BQ_SILVER_DATASET}.products` AS p
   ON oi.product_id = p.product_id
 
 WHERE

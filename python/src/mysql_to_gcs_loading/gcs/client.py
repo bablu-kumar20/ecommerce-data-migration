@@ -1,7 +1,6 @@
 from google.cloud import storage
 from google.oauth2 import service_account
 
-# from config import GCP_PROJECT_ID, GCP_CREDENTIALS_FILE
 from python.src.config import GCP_PROJECT_ID, GCP_CREDENTIALS_FILE
 
 def create_gcs_client():
@@ -9,9 +8,6 @@ def create_gcs_client():
         GCP_CREDENTIALS_FILE
     )
 
-    client = storage.Client(
-        project=GCP_PROJECT_ID,
-        credentials=credentials,
-    )
+    client = storage.Client( project=GCP_PROJECT_ID, credentials=credentials )
 
     return client

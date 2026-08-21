@@ -1,5 +1,5 @@
 CREATE OR REPLACE TABLE
-  `{PROJECT_ID}.ecommerce_gold.product_performance`
+  `{PROJECT_ID}.{BQ_GOLD_DATASET}.product_performance`
 AS
 
 SELECT
@@ -16,7 +16,7 @@ SELECT
     2
   ) AS total_revenue
 
-FROM `{PROJECT_ID}.ecommerce_gold.sales`
+FROM `{PROJECT_ID}.{BQ_GOLD_DATASET}.sales`
 
 GROUP BY
   product_id,

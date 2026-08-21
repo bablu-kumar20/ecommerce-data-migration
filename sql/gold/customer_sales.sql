@@ -1,5 +1,5 @@
 CREATE OR REPLACE TABLE
-  `{PROJECT_ID}.ecommerce_gold.customer_sales`
+  `{PROJECT_ID}.{BQ_GOLD_DATASET}.customer_sales`
 AS
 
 SELECT
@@ -14,7 +14,7 @@ SELECT
     2
   ) AS total_spending
 
-FROM `{PROJECT_ID}.ecommerce_gold.sales`
+FROM `{PROJECT_ID}.{BQ_GOLD_DATASET}.sales`
 
 GROUP BY
   customer_id

@@ -1,5 +1,5 @@
 CREATE OR REPLACE TABLE
-  `{PROJECT_ID}.ecommerce_silver.products`
+  `{PROJECT_ID}.{BQ_SILVER_DATASET}.products`
 AS
 
 SELECT
@@ -36,7 +36,7 @@ FROM (
       ORDER BY product_name
     ) AS row_num
 
-  FROM `{PROJECT_ID}.ecommerce_staging.products`
+  FROM `{PROJECT_ID}.{BQ_BRONZE_DATASET}.products`
 
   WHERE product_id IS NOT NULL
 )
