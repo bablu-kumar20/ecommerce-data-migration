@@ -31,10 +31,6 @@ Thumbs.db
 # Logs
 *.log
 
-# Google ADK local runtime data
-.adk/
-*.session.json
-
 # Temporary files
 tmp/
 temp/
