@@ -10,6 +10,7 @@ venv/
 *.key
 *.pem
 credentials/
+runtime/
 secrets/
 
 # Terraform

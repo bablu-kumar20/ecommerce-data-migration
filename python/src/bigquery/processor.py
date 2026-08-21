@@ -62,3 +62,20 @@ def gold_transformation(
 
     print(f"gold {table} table created successfully")
 
+
+def ml_transformation(
+    bigquery_client: bigquery.Client,
+    project_id: str,
+    ml_dataset: str,
+    sql_name: str,
+) -> None:
+    """Run an opt-in BigQuery ML setup or training SQL file."""
+    sql_file = Path(f"sql/ml/{sql_name}.sql")
+    query = sql_file.read_text(encoding="utf-8")
+    query = query.replace("{PROJECT_ID}", project_id)
+    query = query.replace("{ML_DATASET}", ml_dataset)
+
+    print(f"Running BigQuery ML step: {sql_name}...")
+    run_query(bigquery_client, query)
+    print(f"BigQuery ML step completed: {sql_name}")
+

@@ -1,92 +1,111 @@
-from python.src.mysql_to_gcs_loading.database.connection import create_mysql_connection, get_tables
+from python.src.bigquery.client import create_bigquery_client
+from python.src.bigquery.get_tables import get_bronze_tables
+from python.src.bigquery.loader import load_csv_from_gcs
+from python.src.bigquery.processor import (
+    gold_transformation,
+    ml_transformation,
+    silver_transformation,
+)
+from python.src.config import (
+    BQML_TRAINING_ENABLED,
+    BQ_ML_DATASET,
+    GCP_PROJECT_ID,
+    POST_PIPELINE_MONITOR_ENABLED,
+)
+from python.src.mysql_to_gcs_loading.database.connection import (
+    create_mysql_connection,
+    get_tables,
+)
 from python.src.mysql_to_gcs_loading.extraction.extractor import extract_table
 from python.src.mysql_to_gcs_loading.gcs.client import create_gcs_client
 from python.src.mysql_to_gcs_loading.gcs.uploader import upload_dataframe_as_csv
-from python.src.bigquery.client import create_bigquery_client
-from python.src.config import GCP_PROJECT_ID
-from python.src.bigquery.loader import load_csv_from_gcs
+from python.src.pipeline_monitor import (
+    record_pipeline_failure,
+    run_post_pipeline_monitor,
+)
 
-from python.src.bigquery.processor import silver_transformation,gold_transformation
-from python.src.bigquery.get_tables import get_bronze_tables
 
 GCS_RAW_PREFIX = "Anurag/raw"
-
-
-mysql_connection = create_mysql_connection()
-gcs_client = create_gcs_client()
-bigquery_client = create_bigquery_client()
-
-if mysql_connection.is_connected():
-    print("MySQL connection successful")
-
-    tables = get_tables(mysql_connection)
-
-    for table in tables:
-        print(f"Extracting table: {table}")
-
-        dataframe = extract_table(mysql_connection, table)
-
-        gcs_file_path = f"{GCS_RAW_PREFIX}/{table}/{table}.csv"
-        print(f"DEBUG PREFIX: {GCS_RAW_PREFIX}")
-        print(f"DEBUG PATH: {gcs_file_path}")
-        upload_dataframe_as_csv(
-            gcs_client,
-            dataframe,
-            gcs_file_path,
-        )
-        
-        load_csv_from_gcs(
-        bigquery_client,
-        gcs_file_path,
-        table,
-        )
-
-        print(f"Completed: {table} ({len(dataframe)} rows)")
-        
-
-# silver optimization
-print("Starting Silver transformation...")
-
-# fetch all the tables form bronze layer / bronze_dataset
-tables = get_bronze_tables( bigquery_client )
-
-"""
-get_bronze_tables() returns the table in order : ['order_items', 'products', 'orders', 'customers']
-we need in order : ['orders', 'products', 'order_items', 'customers']
-because in our silver transformation order_items rely on orders table hence 
-i changed the table sequence
-
-"""
-
-tables = ['orders', 'products', 'order_items', 'customers']
-for table in tables :
-    silver_transformation(  bigquery_client,  GCP_PROJECT_ID, table )  
-    
-print("Silver transformation is completed.")
-
-    # Gold transformation
-    # -------------------------
-
-print("Starting Gold transformation...")
-
-gold_tables = [
+SILVER_TABLES = ["orders", "products", "order_items", "customers"]
+GOLD_TABLES = [
     "sales",
     "product_performance",
     "customer_sales",
     "daily_sales",
-    "sales_summary"
+    "sales_summary",
 ]
 
-for table in gold_tables:
 
-    gold_transformation(
-        bigquery_client,
-        GCP_PROJECT_ID,
-        table
-    )
+def run_pipeline() -> None:
+    """Run the ecommerce ETL pipeline and its configured post-run triggers."""
+    stage = "initialization"
+    mysql_connection = None
 
-print("Gold transformation is completed.")
+    try:
+        mysql_connection = create_mysql_connection()
+        gcs_client = create_gcs_client()
+        bigquery_client = create_bigquery_client()
 
-mysql_connection.close()
+        if not mysql_connection.is_connected():
+            raise RuntimeError("MySQL connection was not established.")
+        print("MySQL connection successful")
+
+        stage = "mysql_to_gcs_and_staging"
+        for table in get_tables(mysql_connection):
+            print(f"Extracting table: {table}")
+            dataframe = extract_table(mysql_connection, table)
+            gcs_file_path = f"{GCS_RAW_PREFIX}/{table}/{table}.csv"
+
+            upload_dataframe_as_csv(gcs_client, dataframe, gcs_file_path)
+            load_csv_from_gcs(
+                bigquery_client,
+                gcs_file_path,
+                table,
+            )
+            print(f"Completed: {table} ({len(dataframe)} rows)")
+
+        stage = "silver_transformations"
+        print("Starting Silver transformation...")
+        get_bronze_tables(bigquery_client)
+        for table in SILVER_TABLES:
+            silver_transformation(bigquery_client, GCP_PROJECT_ID, table)
+        print("Silver transformation is completed.")
+
+        stage = "gold_transformations"
+        print("Starting Gold transformation...")
+        for table in GOLD_TABLES:
+            gold_transformation(bigquery_client, GCP_PROJECT_ID, table)
+        print("Gold transformation is completed.")
+
+        if BQML_TRAINING_ENABLED:
+            stage = "bigquery_ml_training"
+            ml_transformation(
+                bigquery_client,
+                GCP_PROJECT_ID,
+                BQ_ML_DATASET,
+                "create_ml_dataset",
+            )
+            ml_transformation(
+                bigquery_client,
+                GCP_PROJECT_ID,
+                BQ_ML_DATASET,
+                "create_daily_revenue_forecast_model",
+            )
+
+        if POST_PIPELINE_MONITOR_ENABLED:
+            stage = "post_pipeline_monitor"
+            run_post_pipeline_monitor()
+
+    except Exception as error:
+        try:
+            record_pipeline_failure(stage, error)
+        except Exception:
+            pass
+        raise
+    finally:
+        if mysql_connection is not None and mysql_connection.is_connected():
+            mysql_connection.close()
 
 
+if __name__ == "__main__":
+    run_pipeline()

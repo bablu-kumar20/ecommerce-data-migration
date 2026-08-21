@@ -63,6 +63,10 @@ class AgentConfigurationError(RuntimeError):
     """Raised when required agent configuration is missing or unsafe."""
 
 
+class AgentInputError(ValueError):
+    """Raised when an agent tool receives invalid user input."""
+
+
 def _maximum_bytes_billed() -> int:
     raw_value = os.getenv(
         "ADK_BQ_MAXIMUM_BYTES_BILLED",
@@ -110,10 +114,11 @@ def _json_safe(value: Any) -> Any:
 
 
 def _error_response(action: str, error: Exception) -> dict[str, Any]:
-    LOGGER.exception("BigQuery agent tool failed while attempting to %s", action)
-    if isinstance(error, AgentConfigurationError):
+    if isinstance(error, (AgentConfigurationError, AgentInputError)):
+        LOGGER.info("Agent tool could not %s: %s", action, error)
         message = str(error)
     else:
+        LOGGER.exception("BigQuery agent tool failed while attempting to %s", action)
         message = (
             f"Could not {action}. Check BigQuery table availability, credentials, "
             "and read permissions."
@@ -154,8 +159,17 @@ def _run_query(
     return rows
 
 
-def get_sales_summary() -> dict[str, Any]:
-    """Return total orders, items, revenue, and average order value from Gold."""
+def _parse_iso_date(value: str, field_name: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError) as error:
+        raise AgentInputError(
+            f"{field_name} must use YYYY-MM-DD format."
+        ) from error
+
+
+def get_all_time_sales_summary() -> dict[str, Any]:
+    """Return all-time Gold totals; never use this tool for a requested date range."""
     try:
         table_id = _table_id(GOLD_DATASET, "sales_summary")
         rows = _run_query(
@@ -176,6 +190,56 @@ def get_sales_summary() -> dict[str, Any]:
         }
     except Exception as error:  # Tool errors must be returned to the agent.
         return _error_response("read the Gold sales summary", error)
+
+
+def get_sales_metrics_for_date_range(
+    start_date: str,
+    end_date: str,
+) -> dict[str, Any]:
+    """Return Gold sales metrics for an inclusive YYYY-MM-DD date range."""
+    try:
+        parsed_start_date = _parse_iso_date(start_date, "start_date")
+        parsed_end_date = _parse_iso_date(end_date, "end_date")
+        if parsed_end_date < parsed_start_date:
+            raise AgentInputError("end_date must be on or after start_date.")
+
+        table_id = _table_id(GOLD_DATASET, "daily_sales")
+        rows = _run_query(
+            f"""
+            SELECT
+              @start_date AS start_date,
+              @end_date AS end_date,
+              COUNT(*) AS dates_with_sales,
+              COALESCE(SUM(total_orders), 0) AS total_orders,
+              COALESCE(SUM(total_items_sold), 0) AS total_items_sold,
+              ROUND(COALESCE(SUM(total_revenue), 0), 2) AS total_revenue,
+              ROUND(
+                SAFE_DIVIDE(
+                  COALESCE(SUM(total_revenue), 0),
+                  COALESCE(SUM(total_orders), 0)
+                ),
+                2
+              ) AS average_order_value
+            FROM `{table_id}`
+            WHERE order_date BETWEEN @start_date AND @end_date
+            """,
+            [
+                bigquery.ScalarQueryParameter(
+                    "start_date", "DATE", parsed_start_date
+                ),
+                bigquery.ScalarQueryParameter(
+                    "end_date", "DATE", parsed_end_date
+                ),
+            ],
+        )
+        return {
+            "status": "success",
+            "source": table_id,
+            "requested_days": (parsed_end_date - parsed_start_date).days + 1,
+            "metrics": rows[0] if rows else None,
+        }
+    except Exception as error:
+        return _error_response("read Gold sales metrics for a date range", error)
 
 
 def get_top_products(limit: int = 5) -> dict[str, Any]:

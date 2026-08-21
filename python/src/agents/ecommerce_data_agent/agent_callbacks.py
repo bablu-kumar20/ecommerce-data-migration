@@ -28,6 +28,9 @@ _SCOPE_PATTERNS = tuple(
         r"\b(?:average order value|aov|units sold|items sold|items purchased)\b",
         r"\b(?:top selling|best selling|total spending|daily sales)\b",
         r"\b(?:data quality|validation|invalid rows?|row counts?|missing tables?)\b",
+        r"\b(?:compare|comparison|trend|forecast|anomaly|anomalies)\b",
+        r"\b(?:pipeline health|monitor|monitoring|remediation|proposal)\b",
+        r"\b(?:approve|approval|reject|correction|source data fix)\b",
     )
 )
 

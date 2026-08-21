@@ -15,8 +15,12 @@ python -m python.src.main
 
 ## Google ADK Agent
 
-The project includes a read-only Google ADK agent for Gold KPI questions,
-Silver data-quality diagnosis, and pipeline row-count checks.
+The project includes a scoped Google ADK multi-agent system for date-aware Gold
+analytics, Silver data-quality diagnosis, post-pipeline monitoring, anomaly
+detection, BigQuery ML forecasting, and human-approved correction proposals.
+Analytics remain read-only; approved proposals only produce manual,
+parameterized SQL and never execute database changes.
 
 See [Google ADK Agent Guide](docs/google-adk-agent.md) for setup,
-authentication, testing, example prompts, and local run commands.
+authentication, triggers, testing, evaluations, example prompts, and local run
+commands.

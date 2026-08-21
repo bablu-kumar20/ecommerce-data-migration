@@ -1,51 +1,88 @@
 # Google ADK Ecommerce Agent
 
-## Purpose
+## What We Built
 
-The agent adds a conversational analysis layer around the existing ETL pipeline.
-It does not replace or modify the deterministic pipeline.
+The Google ADK layer sits around the deterministic ETL pipeline. It reads the
+data produced by the pipeline, answers ecommerce questions, monitors quality,
+finds unusual sales activity, and prepares corrections for human review.
 
 ```text
-User
-  -> Google ADK root agent (Gemini)
-  -> approved Python function tool
-  -> read-only BigQuery request
-  -> structured result
-  -> natural-language explanation
+MySQL -> GCS -> BigQuery staging -> Silver -> Gold
+                                           |
+                                           v
+                              Google ADK root agent
+                              |       |       |
+                              v       v       v
+                           quality  monitor  forecast
+                                                |
+                                                v
+                                      remediation proposals
+                                      (human approval only)
 ```
 
-The first version deliberately has no arbitrary SQL tool, write tool, or pipeline
-execution tool.
+The SQL pipeline remains the source of truth. The language model chooses among
+small, fixed Python tools; it does not receive an unrestricted SQL console or
+database credentials.
 
-## Project Files
+## Agent Architecture
+
+`ecommerce_data_agent` is the root business agent. Simple KPI questions stay on
+this fast path. More specialized requests are delegated to four sub-agents:
+
+| Agent | Responsibility |
+| --- | --- |
+| Root business agent | Sales KPIs, date filters, comparisons, products, customers, and categories |
+| Data-quality agent | Silver validation failures and layer row counts |
+| Pipeline-monitor agent | Latest pipeline health and post-run monitoring |
+| Anomaly/forecast agent | Rolling anomalies and BigQuery ML forecasts |
+| Remediation agent | Create, approve, reject, and render correction proposals |
+
+Important files:
 
 ```text
 python/src/agents/ecommerce_data_agent/
-  __init__.py       ADK package discovery
-  agent.py          Gemini model, instructions, and registered tools
-  agent_callbacks.py data-scope guard and Gemini latency logging
+  agent.py                         root agent and business tools
+  sub_agents.py                    four specialist agents
+  agent_callbacks.py               scope guard and latency logging
+  advanced_behaviors.evalset.json  ADK behavior evaluations
 
 python/src/agent_tools/
-  bigquery_tools.py fixed, read-only BigQuery tools
+  bigquery_tools.py                core KPI and quality tools
+  advanced_analytics_tools.py      comparisons and date-filtered rankings
+  monitoring_tools.py              combined pipeline health report
+  ml_tools.py                      anomaly and BigQuery ML tools
+  remediation_tools.py             approval-only correction proposals
 
-tests/
-  test_bigquery_agent_tools.py
+python/src/pipeline_monitor.py      post-run report and sanitized failure history
+sql/ml/                             BigQuery ML dataset, model, and query SQL
+runtime/                            ignored local reports and proposals
 ```
 
-The agent has six tools:
+## Capabilities
 
-| Tool | Data source | Purpose |
-| --- | --- | --- |
-| `get_sales_summary` | Gold | Revenue, orders, items, and average order value |
-| `get_top_products` | Gold | Highest-revenue products |
-| `get_top_customers` | Gold | Highest-spending customer IDs |
-| `get_recent_daily_sales` | Gold | Latest daily sales rows |
-| `get_data_quality_report` | Silver | Counts for every validation failure |
-| `get_pipeline_row_counts` | All layers | Row counts and missing-table detection |
+The agent can:
 
-## Step 1: Create the Python Environment
+- Return all-time or inclusive date-range orders, items, revenue, and average
+  order value.
+- Compare two periods with absolute values and percentage changes.
+- Rank products or customers for a selected date range.
+- Group revenue by category for a selected date range.
+- Count failed Silver validation checks and missing tables.
+- Build a combined pipeline health result with healthy, warning, or critical
+  status.
+- Detect recent revenue or order anomalies with a rolling statistical baseline.
+- Read a BigQuery ML revenue forecast and model-based anomalies when a model is
+  available.
+- Create a tightly allowlisted data-correction proposal, require explicit human
+  approval, and produce parameterized MySQL for manual execution.
 
-Run these commands from the repository root in PowerShell:
+It deliberately cannot answer general-knowledge questions. A deterministic
+callback blocks requests such as `Who is the prime minister of India?` before
+Gemini or BigQuery is called.
+
+## Install
+
+From the repository root in PowerShell:
 
 ```powershell
 python -m venv .venv
@@ -54,24 +91,20 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Confirm that ADK is available:
+Confirm the compatible ADK packages:
 
 ```powershell
 adk --help
 python -m pip show google-adk google-genai
 ```
 
-Use ADK 1.37 or later in the 1.x series together with Google Gen AI SDK 2.x.
-The two packages are constrained together in `requirements.txt` because older ADK
-versions require an SDK that uses the retired Interactions API schema.
+The project requires Google ADK 1.37 or later in the 1.x series and Google Gen
+AI SDK 2.x. Keep both packages within the ranges in `requirements.txt`.
 
-## Step 2: Configure the Environment
+## Configure
 
-The existing root `.env` remains private and is already ignored by Git. Use
-`.env.example` only as a list of required names. Do not commit an API key or
-service-account file.
-
-Confirm the ETL and dataset settings in `.env`:
+Keep real values in the ignored `.env`; use `.env.example` as the template.
+Never commit API keys or service-account files.
 
 ```dotenv
 GCP_PROJECT_ID=your-gcp-project-id
@@ -79,27 +112,28 @@ GCP_CREDENTIALS_FILE=credentials/service-account.json
 BQ_DATASET=ecommerce_staging
 BQ_SILVER_DATASET=ecommerce_silver
 BQ_GOLD_DATASET=ecommerce_gold
+BQ_ML_DATASET=ecommerce_ml
+
 ADK_MODEL=gemini-3.5-flash-lite
 ADK_BQ_MAXIMUM_BYTES_BILLED=104857600
+
+POST_PIPELINE_MONITOR_ENABLED=TRUE
+PIPELINE_INVALID_ROW_THRESHOLD=0
+BQML_TRAINING_ENABLED=FALSE
 ```
 
-`ADK_BQ_MAXIMUM_BYTES_BILLED` is a per-query safety limit. The default is
-104857600 bytes, or 100 MiB.
+`POST_PIPELINE_MONITOR_ENABLED=TRUE` triggers a health check after Gold tables
+finish. Its latest result is written to `runtime/latest_pipeline_health.json`.
+Pipeline exceptions are sanitized and appended to
+`runtime/pipeline_failures.jsonl`; the monitor agent can read recent events.
 
-`gemini-3.5-flash-lite` is used because these are simple, fixed database lookups.
-It is Google's low-latency Flash-Lite model and defaults to minimal thinking.
+`BQML_TRAINING_ENABLED=FALSE` is intentional. Model creation can consume
+BigQuery quota and needs additional permissions. Set it to `TRUE` only when you
+want the ETL run to create or replace the forecast model.
 
-The agent uses ADK's Gemini Interactions API adapter. This endpoint supports the
-current Gemini model and the agent's custom BigQuery function tools.
+Choose one Gemini authentication method.
 
-## Step 3: Choose Gemini Authentication
-
-Use exactly one of the following options.
-
-### Option A: Vertex AI
-
-This is the natural choice when the trainer wants the agent fully connected to
-Google Cloud.
+Vertex AI:
 
 ```dotenv
 GOOGLE_GENAI_USE_VERTEXAI=TRUE
@@ -108,160 +142,160 @@ GOOGLE_CLOUD_LOCATION=us-central1
 GOOGLE_APPLICATION_CREDENTIALS=credentials/service-account.json
 ```
 
-The service account needs enough permission to invoke the selected Vertex AI
-model, create BigQuery query jobs, and read the approved datasets.
-
-### Option B: Google AI Studio
-
-This is simpler for a local demonstration. Gemini uses the API key, while the
-BigQuery tools continue using `GCP_CREDENTIALS_FILE`.
+Google AI Studio:
 
 ```dotenv
 GOOGLE_GENAI_USE_VERTEXAI=FALSE
 GOOGLE_API_KEY=your-gemini-api-key
 ```
 
-Remove or comment out the Vertex AI variables when using this mode.
-
-## Step 4: Confirm the ETL Data
-
-Run the existing pipeline before asking the agent about current data:
+## Run The Pipeline
 
 ```powershell
 python -m python.src.main
 ```
 
-The agent reads the resulting staging, Silver, and Gold tables. It does not run
-this command itself.
+The run performs extraction, staging, Silver, Gold, and the health trigger. If
+BigQuery ML training is enabled, it also creates the ML dataset and daily
+revenue forecast model before monitoring.
 
-## Step 5: Run the Tool Tests
+For an existing warehouse, the same BigQuery ML objects can be created manually
+from these templates:
 
-The tests use fake BigQuery clients and do not consume BigQuery or Gemini quota:
-
-```powershell
-python -m unittest discover -s tests -p "test_*.py"
+```text
+sql/ml/create_ml_dataset.sql
+sql/ml/create_daily_revenue_forecast_model.sql
 ```
 
-## Step 6: Run the Agent in the Terminal
+Replace the project and dataset placeholders before submitting them. Forecast
+tools return a structured `model unavailable` error until the model exists.
 
-Run this from the repository root:
+## Run The Agent
+
+Terminal:
 
 ```powershell
 adk run python/src/agents/ecommerce_data_agent
 ```
 
-Type `exit` to finish the session.
-
-## Step 7: Run the ADK Development Web Interface
-
-Run this from the repository root:
+ADK development web interface:
 
 ```powershell
 adk web --port 8000 python/src/agents
 ```
 
-Open `http://localhost:8000` and select `ecommerce_data_agent`. The ADK web
-interface is a local development and debugging interface, not a production UI.
+Then open `http://localhost:8000` and select `ecommerce_data_agent`. Restart the
+agent after changing `.env`, because configuration is loaded at startup.
 
-## Questions to Test
+## Questions To Test
 
-Use this order for a trainer demonstration:
+1. `What are our total revenue, orders, items sold, and average order value?`
+2. `How many orders and items were sold from 2025-01-01 through 2025-02-28?`
+3. `Compare sales from January 2025 with February 2025.`
+4. `Show the top five products by revenue from 2025-01-01 to 2025-02-28.`
+5. `Show the top five customers by spending in February 2025.`
+6. `Show revenue by category for February 2025.`
+7. `Which Silver validation checks are failing?`
+8. `Run a complete pipeline health check.`
+9. `Were there unusual sales days in the last 90 days?`
+10. `Forecast revenue for the next 14 days.`
+11. `Who is the prime minister of India?`
 
-1. `Are all expected staging, Silver, and Gold tables available?`
-2. `What is our total revenue and average order value?`
-3. `Show the top five products by revenue.`
-4. `Which Silver validation checks are failing?`
-5. `Why might revenue be null or lower than expected?`
-6. `Show the latest daily sales figures.`
-7. `Who is the prime minister of India?`
+Question 11 is the negative scope test. It must return only the fixed
+ecommerce-data boundary message.
 
-For the fifth question, the agent is instructed to call the sales summary,
-quality report, and row-count tools before giving a diagnosis.
+The warehouse does not define a currency, so the agent reports monetary values
+without inventing `$`, `INR`, or another currency symbol.
 
-The seventh question is a negative scope test. It must return the fixed message
-that the agent can only answer questions about ecommerce pipeline data. Gemini
-and BigQuery are not called for that request.
+## Approved Correction Flow
 
-## Safety Design
+Corrections are intentionally separated from analytics:
 
-- Table names and queries are defined in Python, not supplied by the model.
-- Every query is read-only and has a maximum-bytes-billed limit.
-- User list requests are capped at 20 products or customers and 90 daily rows.
-- Customer names and email addresses are not returned by the tools.
-- Tool results are converted to JSON-safe values before Gemini receives them.
-- Missing tables and permission errors are returned as structured tool errors.
-- A deterministic callback blocks unrelated questions before a model call.
-- Mixed-topic requests are instructed to receive only the pipeline-data answer.
-- Local ADK session data and saved sessions are ignored by Git.
+1. Ask the remediation agent to propose a correction to an allowlisted field.
+2. Review the proposal ID, table, record, field, proposed value, and reason.
+3. Explicitly approve or reject that proposal by ID.
+4. After approval, request its parameterized MySQL script.
+5. A human reviews and executes the script outside the agent.
 
-## Performance Behavior
+Approval never executes SQL. The agent has no database-update tool. Proposals
+are stored locally in the ignored `runtime/remediation_proposals.json` file.
 
-- The authenticated BigQuery client is created once and reused until the agent
-  process exits.
-- BigQuery query caching remains enabled.
-- Gemini calls and BigQuery operations log their elapsed time in seconds.
-- Model output is capped at 512 tokens, and Flash-Lite defaults to minimal thinking.
-- The first valid question can still be slower while libraries, authentication,
-  and network connections initialize.
+## Tests And Evaluations
+
+Unit and integration tests use fake clients, so they do not consume Gemini or
+BigQuery quota:
+
+```powershell
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+Run the seven ADK behavior scenarios when Gemini and BigQuery are available:
+
+```powershell
+adk eval python/src/agents/ecommerce_data_agent/__init__.py python/src/agents/ecommerce_data_agent/advanced_behaviors.evalset.json --print_detailed_results
+```
+
+The eval set covers date selection, comparisons, rankings, specialist routing,
+forecast wording, human approval, and the general-knowledge scope block.
+
+## Safety And Cost Controls
+
+- All analytics queries are fixed, read-only SQL with typed parameters.
+- User-controlled sort fields and editable columns use strict allowlists.
+- BigQuery queries have a configurable maximum-bytes-billed limit.
+- Product and customer lists are capped at 20 rows.
+- Customer email addresses are not returned to Gemini.
+- Tool output is converted to JSON-safe values.
+- Missing resources and permission failures become structured tool errors.
+- The root callback blocks unrelated requests before a model call.
+- The remediation agent can only prepare manual, parameterized scripts.
+- BigQuery ML training is disabled by default.
+- Local ADK sessions, runtime reports, credentials, and `.env` are ignored.
+
+## Performance
+
+- One authenticated BigQuery client is reused for the process lifetime.
+- BigQuery query caching stays enabled.
+- Gemini and BigQuery elapsed times are logged.
+- Flash-Lite uses minimal thinking and a 512-token response cap.
+- Focused Gold queries are faster than full row-count or quality checks.
+- The first request may be slower while authentication and connections warm up.
+
+## Trainer Questions
+
+- Why use deterministic tools instead of letting the model generate arbitrary SQL?
+- How should we measure tool-selection accuracy and answer correctness separately?
+- What anomaly threshold and lookback period fit our business seasonality?
+- How often should the ARIMA model be retrained, and how should forecast drift be measured?
+- Should monitoring run in Cloud Scheduler, Composer, or after the existing ETL job?
+- Which IAM roles give query access without granting unnecessary write permissions?
+- What evidence should a human see before approving a source-data correction?
+- When should each specialist become a separate deployed service instead of an ADK sub-agent?
 
 ## Troubleshooting
 
-`adk` is not recognized:
+If `adk` is not recognized, activate `.venv` and install `requirements.txt`.
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-```
+If Gemini authentication fails, verify that exactly one authentication method
+is configured and that the selected model is available in its project/location.
 
-`The legacy Interactions API schema is no longer supported`:
+If BigQuery fails, verify all dataset names, the private credential path, query
+job permission, table read permission, and the byte limit.
 
-```powershell
-python -m pip install --upgrade "google-adk>=1.37,<2" "google-genai>=2.9,<3"
-python -m pip show google-adk google-genai
-```
+If forecasts say the model is unavailable, enable BigQuery ML training or create
+the SQL objects manually, then confirm the service account has BigQuery ML
+permissions.
 
-Upgrade both packages together. ADK 1.29 constrains `google-genai` below 2.0,
-so upgrading only `google-genai` creates an incompatible environment.
-
-Gemini authentication fails:
-
-- Verify that only one authentication mode is configured.
-- For Vertex AI, check project, location, service-account path, and model access.
-- For AI Studio, check `GOOGLE_API_KEY` and `GOOGLE_GENAI_USE_VERTEXAI=FALSE`.
-
-BigQuery returns a configuration error:
-
-- Check `GCP_PROJECT_ID` and the three dataset names.
-- Check that `GCP_CREDENTIALS_FILE` points to an existing private JSON file.
-- Check that the service account can create query jobs and read the datasets.
-
-A query exceeds the byte limit:
-
-- Keep the safety limit in place for normal use.
-- Review the query and expected scan size before increasing
-  `ADK_BQ_MAXIMUM_BYTES_BILLED`.
-
-The agent still responds slowly:
-
-- Compare the `Gemini model call completed` and `BigQuery request completed`
-  timing lines in the terminal log.
-- Ask a focused question such as `Show the top five products by revenue.`
-- Restart the agent after changing `.env`; model and client configuration are
-  loaded when the process starts.
-- The pipeline row-count question checks 13 table metadata records and can take
-  longer than one Gold KPI query.
-
-## Next Development Phases
-
-After the single agent is tested and evaluated, suitable additions are anomaly
-detection, pipeline-log monitoring, formal ADK evaluation cases, and a separate
-approval-gated remediation agent. Write capabilities should not be added to the
-analyst agent.
+If answers are slow, compare the logged Gemini and BigQuery timings. Restart the
+agent after configuration changes and test with one focused Gold KPI question.
 
 Official references:
 
 - [ADK Python quickstart](https://adk.dev/get-started/python/)
 - [ADK agent concepts](https://adk.dev/agents/)
+- [ADK workflow agents](https://adk.dev/agents/workflow-agents/)
 - [ADK function tools](https://adk.dev/tools-custom/function-tools/)
 - [ADK evaluation](https://adk.dev/evaluate/)
 - [ADK safety and security](https://adk.dev/safety/)
+- [BigQuery ML time-series models](https://cloud.google.com/bigquery/docs/reference/standard-sql/bigqueryml-syntax-create-time-series)
+- [BigQuery ML anomaly detection](https://cloud.google.com/bigquery/docs/reference/standard-sql/bigqueryml-syntax-detect-anomalies)
