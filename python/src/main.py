@@ -9,7 +9,7 @@ from python.src.bigquery.loader import load_csv_from_gcs
 from python.src.bigquery.processor import silver_transformation,gold_transformation
 from python.src.bigquery.get_tables import get_bronze_tables
 
-GCS_RAW_PREFIX = "optimization_testing"
+GCS_RAW_PREFIX = "Anurag/raw"
 
 
 mysql_connection = create_mysql_connection()
@@ -88,3 +88,5 @@ for table in gold_tables:
 print("Gold transformation is completed.")
 
 mysql_connection.close()
+
+
